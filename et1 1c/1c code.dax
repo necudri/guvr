@@ -1,0 +1,191 @@
+DEFINE
+    MEASURE 'dim_et1_ver2'[_уровень] =
+        VAR IsNameInScope =
+            ISINSCOPE ( 'dim_et1_ver2'[журнал имя] )
+        VAR IsOrgInScope =
+            ISINSCOPE ( 'dim_et1_ver2'[организация] )
+        VAR IsProjInScope =
+            ISINSCOPE ( 'dim_et1_ver2'[проект] )
+        VAR Result =
+            SWITCH (
+                TRUE (),
+                IsNameInScope, "журнал",
+                IsOrgInScope, "организация",
+                IsProjInScope, "проект",
+                "No filter"
+            )
+        RETURN
+            Result
+    MEASURE 'dim_et1_ver2'[Кол-во ЕТ-1] =
+        VAR min_date =
+            MIN ( 'календарь'[дата] )
+        VAR result =
+            COUNTROWS (
+                FILTER (
+                    'dim_et1_ver2',
+                    AND (
+                        'dim_et1_ver2'[журнал конец] >= min_date,
+                        'dim_et1_ver2'[журнал начало] <= min_date
+                    )
+                )
+            )
+        RETURN
+            result
+    MEASURE 'dim_et1_ver2'[_кол-во dist] =
+        DISTINCTCOUNT ( 'fact_et1_ver2'[журнал код] )
+    MEASURE 'dim_et1_ver2'[_выдано_проект/орг_dist] = [_кол-во dist]
+    MEASURE 'dim_et1_ver2'[_выдано_журнал] =
+        COUNTROWS ( 'fact_et1_ver2' )
+    MEASURE 'dim_et1_ver2'[выдано] =
+        SWITCH (
+            TRUE (),
+            OR (
+                [_уровень] = "проект",
+                OR ( [_уровень] = "организация", [_уровень] = "No filter" )
+            ), [_выдано_проект/орг_dist],
+            [_уровень] = "журнал", [_выдано_журнал]
+        )
+    MEASURE 'dim_et1_ver2'[_согл_журнал] =
+        VAR StatusFilter =
+            FILTER (
+                'fact_et1_ver2',
+                AND (
+                    'fact_et1_ver2'[статус] <> "Не согласован",
+                    'fact_et1_ver2'[статус] <> "На согласовании"
+                )
+            )
+        VAR result =
+            COUNTROWS ( StatusFilter )
+        RETURN
+            result
+    MEASURE 'dim_et1_ver2'[_согл_проект/орг_dist] =
+        VAR StatusFilter =
+            FILTER (
+                'fact_et1_ver2',
+                AND (
+                    'fact_et1_ver2'[статус] <> "Не согласован",
+                    'fact_et1_ver2'[статус] <> "На согласовании"
+                )
+            )
+        VAR result =
+            CALCULATE ( [_кол-во dist], StatusFilter )
+        RETURN
+            result
+    MEASURE 'dim_et1_ver2'[согл] =
+        SWITCH (
+            TRUE (),
+            OR (
+                [_уровень] = "проект",
+                OR ( [_уровень] = "организация", [_уровень] = "No filter" )
+            ), [_согл_проект/орг_dist],
+            [_уровень] = "журнал", [_согл_журнал]
+        )
+    MEASURE 'dim_et1_ver2'[_замечания_проект/орг_dist] =
+        VAR StatusFilter =
+            FILTER ( 'fact_et1_ver2', 'fact_et1_ver2'[статус] = "Не согласован" )
+        VAR result =
+            CALCULATE ( [_кол-во dist], StatusFilter )
+        RETURN
+            result
+    MEASURE 'dim_et1_ver2'[_замечания_журнал] =
+        VAR StatusFilter =
+            FILTER ( 'fact_et1_ver2', 'fact_et1_ver2'[статус] = "Не согласован" )
+        VAR result =
+            COUNTROWS ( StatusFilter )
+        RETURN
+            result
+    MEASURE 'dim_et1_ver2'[замечания] =
+        SWITCH (
+            TRUE (),
+            OR (
+                [_уровень] = "проект",
+                OR ( [_уровень] = "организация", [_уровень] = "No filter" )
+            ), [_замечания_проект/орг_dist],
+            [_уровень] = "журнал", [_замечания_журнал]
+        )
+    MEASURE 'dim_et1_ver2'[_примечание_проект] =
+        VAR cond1 =
+            [кол-во] = BLANK ()
+        VAR exp1 =
+            BLANK ()
+        VAR cond3 = [кол-во] = [выдано]
+        VAR exp3 = "выдано в полном объеме"
+        VAR cond2 = [кол-во] = [согласовано]
+        VAR exp2 = "согласование окончено"
+        VAR result =
+            SWITCH ( TRUE (), cond1, exp1, cond2, exp2, cond3, exp3 )
+        RETURN
+            result
+    MEASURE 'dim_et1_ver2'[_примечание_организация] =
+        VAR cond1 =
+            [кол-во] = BLANK ()
+        VAR exp1 =
+            BLANK ()
+        VAR cond3 = [кол-во] = [выдано]
+        VAR exp3 = "выдано в полном объеме"
+        VAR cond2 = [кол-во] = [согласовано]
+        VAR exp2 = "согласование окончено"
+        VAR result =
+            SWITCH ( TRUE (), cond1, exp1, cond2, exp2, cond3, exp3 )
+        RETURN
+            result
+    MEASURE 'dim_et1_ver2'[_примечание_журнал] =
+        VAR cond0 = [кол-во] = BLANK ()
+        VAR exp0 = BLANK ()
+        VAR cond1 = [выдано] = BLANK ()
+        VAR exp1 = "Не выдано"
+        VAR cond2 = [согласовано] = 0
+        VAR cond21 =
+            HASONEVALUE ( 'fact_et1_ver2'[код документа] )
+        VAR exp2 =
+            VALUES ( 'fact_et1_ver2'[этап согласования] )
+        VAR cond3 = [согласовано] > 1
+        VAR exp3 = "Согласовано несколько ет1"
+        VAR cond4 = [выдано] - [замечания] > 1
+        VAR exp4 = "Выдано несколько ет1"
+        VAR cond5 = [замечания] <> 0
+        VAR exp51 = VALUES ( 'fact_et1_ver2'[комментарий] )
+        VAR exp5 =
+            "Замечание от "
+                & RIGHT ( exp2, ( LEN ( exp2 ) - 29 ))&": "& exp51
+        VAR result =
+            SWITCH (
+                TRUE (),
+                cond0, exp0,
+                cond1, exp1,
+                AND ( AND ( cond2, cond21 ), cond5 ), exp5,
+                AND ( cond2, cond21 ), exp2,
+                cond3, exp3,
+                cond4, exp4
+            )
+        RETURN
+            result
+    MEASURE 'dim_et1_ver2'[примечание] =
+        SWITCH (
+            TRUE (),
+            [_уровень] = "проект", [_примечание_проект],
+            [_уровень] = "организация", [_примечание_организация],
+            [_уровень] = "журнал", [_примечание_журнал]
+        )
+    MEASURE 'dim_et1_ver2'[процент выдано] =
+        FORMAT ( DIVIDE ( [выдано], [кол-во], BLANK () ), "#%" )
+
+EVALUATE
+SUMMARIZECOLUMNS (
+    'dim_et1_ver2'[журнал имя],
+    FILTER (
+        VALUES ( 'календарь'[декада месяц год] ),
+        'календарь'[декада месяц год] = "3 декада Авг 2022"
+    ),
+    FILTER (
+        VALUES ( 'dim_et1_ver2'[проект] ),
+        'dim_et1_ver2'[проект] = "Амурский ГПЗ"
+    ),
+    "_уровень", [_уровень],
+    "кол-во", [кол-во],
+    "выдано", [выдано],
+    "% выдано", [процент выдано],
+    "согл", [согл],
+    "замечания", [замечания],
+    "примечание", [примечание]
+)
